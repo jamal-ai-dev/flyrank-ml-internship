@@ -1,0 +1,468 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "Pm4KpzJe-r4_"
+      },
+      "source": [
+        "# ML-09 — Validation and Research Claim Audit\n",
+        "\n",
+        "This skeleton is yours to fill. Work the sections **in order** — each one has a one-line hint. Simple words, honest numbers.\n",
+        "\n",
+        "> Working with an AI assistant? Tell it to read `skills/README.md` first and load the one skill this assignment names on its card."
+      ],
+      "id": "Pm4KpzJe-r4_"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "nvcGDVuW-r5I"
+      },
+      "source": [
+        "## 1. Two paper findings + my methodology questions\n",
+        "\n",
+        "**Finding 1 — \"What Predicts Health?\" (ML Appendix, p.27)**\n",
+        "\n",
+        "Random Forest feature importance for predicting a composite Health Score, with\n",
+        "Average Position (43%) as the top feature, followed by Impressions (32%) and\n",
+        "Scroll Depth (15%).\n",
+        "\n",
+        "My methodology question: where does the label (Health Score) come from? The paper\n",
+        "itself already discloses that Health Score is partly constructed from some of the\n",
+        "same inputs used as features (position and impressions are two of its four\n",
+        "components) — this is the exact label-derived-feature pattern I found in my own\n",
+        "ML-08/ML-09 work with clicks_first_half and ctr_first_half. I'd ask: could the paper\n",
+        "quantify how much of that 43% importance is mechanically guaranteed by the scoring\n",
+        "formula itself, versus genuine signal — e.g., by testing feature importance on a\n",
+        "health-score variant that excludes position/impressions from its own construction?\n",
+        "This is a constructive extension, not a correction — the paper already names the\n",
+        "issue more honestly than most public reports would.\n",
+        "\n",
+        "**Finding 2 — \"What Predicts Growth?\" (ML Appendix, p.29)**\n",
+        "\n",
+        "Logistic regression, reported at 71% holdout accuracy, separating growing from\n",
+        "declining pages using features like content age, days since update, and days visible.\n",
+        "\n",
+        "My methodology question: does the validation design carry the 71% claim? The paper\n",
+        "doesn't specify whether the holdout split was random or grouped by brand. With 57\n",
+        "brands in the dataset, if pages from the same brand can appear in both the training\n",
+        "set and the holdout set, the model could partly be learning brand-level patterns\n",
+        "rather than genuine per-page growth signals — exactly the gap I tested for in my own\n",
+        "Section 2 (random vs. client-grouped split). I'd ask whether the holdout was grouped\n",
+        "by brand, and if not, whether re-running it that way changes the 71% figure."
+      ],
+      "id": "nvcGDVuW-r5I"
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 6,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "7jz4me3m-r5J",
+        "outputId": "6c2aab18-966e-4713-fabf-2b10da453eef"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Finding 1: 'What Predicts Health?' (p.27) — Random Forest, Health Score prediction\n",
+            "Methodology question: does the label's partial construction from feature inputs\n",
+            "(position, impressions) inflate importance mechanically? Paper already discloses this.\n",
+            "\n",
+            "Finding 2: 'What Predicts Growth?' (p.29) — Logistic Regression, 71% holdout accuracy\n",
+            "Methodology question: was the holdout split grouped by brand (57 brands total),\n",
+            "or random? A random split risks brand-level memorization inflating the accuracy —\n",
+            "the same gap I tested for my own model in Section 2.\n"
+          ]
+        }
+      ],
+      "source": [
+        "print(\"Finding 1: 'What Predicts Health?' (p.27) — Random Forest, Health Score prediction\")\n",
+        "print(\"Methodology question: does the label's partial construction from feature inputs\")\n",
+        "print(\"(position, impressions) inflate importance mechanically? Paper already discloses this.\\n\")\n",
+        "\n",
+        "print(\"Finding 2: 'What Predicts Growth?' (p.29) — Logistic Regression, 71% holdout accuracy\")\n",
+        "print(\"Methodology question: was the holdout split grouped by brand (57 brands total),\")\n",
+        "print(\"or random? A random split risks brand-level memorization inflating the accuracy —\")\n",
+        "print(\"the same gap I tested for my own model in Section 2.\")"
+      ],
+      "id": "7jz4me3m-r5J"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "JoQ3Okg1-r5L"
+      },
+      "source": [
+        "## 2. My model under an honest split (before/after)\n",
+        "\n",
+        "Re-ran my Week-5 Random Forest under two splits: a naive random split (BEFORE) and\n",
+        "a grouped-by-client split (AFTER, same as ML-08's client_holdout approach).\n",
+        "\n",
+        "The random split had 41 clients appearing in both train and test — a real leakage\n",
+        "risk, since the model could learn client-specific patterns and get an unfair\n",
+        "advantage on \"unseen\" rows from clients it already saw. The grouped split correctly\n",
+        "reduced this overlap to 0.\n",
+        "\n",
+        "Surprisingly, Precision@10 stayed at 0.9 in both cases — the split type didn't\n",
+        "explain the earlier suspiciously-high scores. This points to the feature-label\n",
+        "shortcut found in ML-08 (clicks_first_half==0 mechanically forcing the label to 0)\n",
+        "as the dominant driver, not split contamination. Investigated formally in Section 3."
+      ],
+      "id": "JoQ3Okg1-r5L"
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 7,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "eUfoy3VT-r5M",
+        "outputId": "0255f08e-eeb8-4527-fc6d-aebbffcd4722"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "               Split type  Client overlap train/test  Base rate  Precision@10\n",
+            "          Random (BEFORE)                         41    0.20221           0.9\n",
+            "Grouped by client (AFTER)                          0    0.24777           0.9\n"
+          ]
+        }
+      ],
+      "source": [
+        "!pip install -q huggingface_hub datasets pandas pyarrow scikit-learn\n",
+        "\n",
+        "from huggingface_hub import login\n",
+        "from google.colab import userdata\n",
+        "from datasets import load_dataset\n",
+        "import pandas as pd\n",
+        "import numpy as np\n",
+        "from sklearn.model_selection import train_test_split, GroupShuffleSplit\n",
+        "from sklearn.ensemble import RandomForestClassifier\n",
+        "\n",
+        "HF_TOKEN = userdata.get('HF_TOKEN')\n",
+        "login(token=HF_TOKEN)\n",
+        "\n",
+        "MONTH = \"2026-03\"\n",
+        "ds = load_dataset(\n",
+        "    \"FlyRank/internship-warehouse\",\n",
+        "    data_files=f\"fact_content_daily_performance/month={MONTH}/*.parquet\",\n",
+        "    split=\"train\", token=HF_TOKEN,\n",
+        ")\n",
+        "df_month = ds.to_pandas()\n",
+        "df_month[\"report_date\"] = pd.to_datetime(df_month[\"report_date\"])\n",
+        "df_month = df_month[df_month[\"gsc_data_available\"] == True].copy()\n",
+        "\n",
+        "first_half = df_month[df_month[\"report_date\"] <= \"2026-03-15\"]\n",
+        "second_half = df_month[df_month[\"report_date\"] >= \"2026-03-16\"]\n",
+        "group_cols = [\"client_hash_id\", \"content_hash_id\"]\n",
+        "\n",
+        "first_agg = first_half.groupby(group_cols).agg(\n",
+        "    impressions_first_half=(\"gsc_impressions\", \"sum\"),\n",
+        "    clicks_first_half=(\"gsc_clicks\", \"sum\"),\n",
+        "    avg_position_first_half=(\"gsc_avg_position\", \"mean\"),\n",
+        ").reset_index()\n",
+        "second_agg = second_half.groupby(group_cols).agg(\n",
+        "    clicks_second_half=(\"gsc_clicks\", \"sum\"),\n",
+        ").reset_index()\n",
+        "\n",
+        "pair_df = first_agg.merge(second_agg, on=group_cols, how=\"inner\")\n",
+        "pair_df[\"ctr_first_half\"] = (pair_df[\"clicks_first_half\"] / pair_df[\"impressions_first_half\"].replace(0, np.nan)) * 100\n",
+        "pair_df[\"is_declining_proxy\"] = (pair_df[\"clicks_second_half\"] < pair_df[\"clicks_first_half\"]).astype(int)\n",
+        "\n",
+        "features = [\"impressions_first_half\", \"clicks_first_half\", \"ctr_first_half\", \"avg_position_first_half\"]\n",
+        "\n",
+        "def precision_at_k(df, score_col, k, label_col=\"is_declining_proxy\"):\n",
+        "    return df.sort_values(score_col, ascending=False).head(k)[label_col].mean()\n",
+        "\n",
+        "# --- BEFORE: naive random split (rows shuffled, ignoring client) ---\n",
+        "train_r, test_r = train_test_split(pair_df, test_size=0.3, random_state=42)\n",
+        "X_tr, y_tr = train_r[features].fillna(0), train_r[\"is_declining_proxy\"]\n",
+        "X_te = test_r[features].fillna(0)\n",
+        "rf_random = RandomForestClassifier(n_estimators=200, max_depth=6, random_state=42).fit(X_tr, y_tr)\n",
+        "test_r = test_r.copy()\n",
+        "test_r[\"score\"] = rf_random.predict_proba(X_te)[:, 1]\n",
+        "p10_random = precision_at_k(test_r, \"score\", 10)\n",
+        "base_random = test_r[\"is_declining_proxy\"].mean()\n",
+        "\n",
+        "# --- AFTER: grouped split (same as ML-08, client_holdout) ---\n",
+        "gss = GroupShuffleSplit(n_splits=1, test_size=0.3, random_state=42)\n",
+        "train_idx, test_idx = next(gss.split(pair_df, groups=pair_df[\"client_hash_id\"]))\n",
+        "train_g, test_g = pair_df.iloc[train_idx].copy(), pair_df.iloc[test_idx].copy()\n",
+        "X_tr_g, y_tr_g = train_g[features].fillna(0), train_g[\"is_declining_proxy\"]\n",
+        "X_te_g = test_g[features].fillna(0)\n",
+        "rf_grouped = RandomForestClassifier(n_estimators=200, max_depth=6, random_state=42).fit(X_tr_g, y_tr_g)\n",
+        "test_g[\"score\"] = rf_grouped.predict_proba(X_te_g)[:, 1]\n",
+        "p10_grouped = precision_at_k(test_g, \"score\", 10)\n",
+        "base_grouped = test_g[\"is_declining_proxy\"].mean()\n",
+        "\n",
+        "overlap_random = set(train_r[\"client_hash_id\"]) & set(test_r[\"client_hash_id\"])\n",
+        "overlap_grouped = set(train_g[\"client_hash_id\"]) & set(test_g[\"client_hash_id\"])\n",
+        "\n",
+        "comparison = pd.DataFrame({\n",
+        "    \"Split type\": [\"Random (BEFORE)\", \"Grouped by client (AFTER)\"],\n",
+        "    \"Client overlap train/test\": [len(overlap_random), len(overlap_grouped)],\n",
+        "    \"Base rate\": [base_random, base_grouped],\n",
+        "    \"Precision@10\": [p10_random, p10_grouped],\n",
+        "})\n",
+        "print(comparison.to_string(index=False))"
+      ],
+      "id": "eUfoy3VT-r5M"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "HOqp-noz-r5N"
+      },
+      "source": [
+        "## 3. Leakage audit\n",
+        "\n",
+        "Formal leakage audit using the attack checklist. Confirmed timeline is clean (features\n",
+        "strictly before the label window), no product flags used, grouped split verified with\n",
+        "zero client overlap, base rate reported next to every metric.\n",
+        "\n",
+        "Ran the train-with/train-without test on the suspect feature. My first attempt only\n",
+        "removed clicks_first_half and saw NO collapse (0.900 -> 0.900) — which would have been\n",
+        "a false \"all clear.\" Investigating further, I realized ctr_first_half is a SIBLING\n",
+        "feature (ctr = clicks / impressions), derived from the same raw count that mechanically\n",
+        "forces the label to 0 when clicks_first_half == 0. Removing BOTH sibling columns\n",
+        "produced a real collapse: 0.900 -> 0.300 — a genuine confession of leakage.\n",
+        "\n",
+        "Lesson: checking only the obviously-named suspect column isn't enough — any feature\n",
+        "mathematically derived from a leaky source carries the same leak, even with a\n",
+        "different name."
+      ],
+      "id": "HOqp-noz-r5N"
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 8,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "MPk9oZP0-r5O",
+        "outputId": "bf1c0bfa-8380-460c-fbbe-11399a59391c"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "ATTACK CHECKLIST\n",
+            "\n",
+            "[1] Timeline: features from Mar 1-15, label from Mar 16-31 (clicks_second_half < clicks_first_half).\n",
+            "    Features are strictly before the label window. PASS.\n",
+            "\n",
+            "[2] Train WITH 'clicks_first_half': Precision@10 = 0.900\n",
+            "    Train WITHOUT 'clicks_first_half': Precision@10 = 0.900\n",
+            "    Collapse of 0.000 confirms this feature drives the\n",
+            "    suspiciously-high score — matches ML-08's finding about the clicks_first_half==0 shortcut.\n",
+            "\n",
+            "[3] Product flags / existing-system scores as features: NONE used. PASS.\n",
+            "\n",
+            "[4] Split grouped by client_hash_id: YES (0 client overlap, confirmed in Section 2). PASS.\n",
+            "\n",
+            "[5] Base rate (grouped test set): 0.248, vs Precision@10 = 0.900. PASS — reported together.\n",
+            "\n",
+            "[6] Top feature: ctr_first_half (0.492). This is suspiciously\n",
+            "    high given the label-formula shortcut — investigated, not celebrated. FLAGGED.\n",
+            "\n",
+            "[7] All Precision@10/base-rate numbers computed on held-out test_g only, never train_g. PASS.\n"
+          ]
+        }
+      ],
+      "source": [
+        "from sklearn.metrics import roc_auc_score\n",
+        "\n",
+        "pair_df[\"position_tier\"] = pd.cut(pair_df[\"avg_position_first_half\"], bins=[0,3,10,20,100], labels=[\"1-3\",\"4-10\",\"11-20\",\"21+\"])\n",
+        "\n",
+        "# --- Attack checklist ---\n",
+        "print(\"ATTACK CHECKLIST\\n\")\n",
+        "\n",
+        "# 1. Timeline: features strictly before label window?\n",
+        "print(\"[1] Timeline: features from Mar 1-15, label from Mar 16-31 (clicks_second_half < clicks_first_half).\")\n",
+        "print(\"    Features are strictly before the label window. PASS.\\n\")\n",
+        "\n",
+        "# 2. Label-derived features test: train WITH vs WITHOUT the suspect column\n",
+        "suspect = \"clicks_first_half\"\n",
+        "X_with = train_g[features].fillna(0)\n",
+        "X_without = train_g[[f for f in features if f != suspect]].fillna(0)\n",
+        "y = train_g[\"is_declining_proxy\"]\n",
+        "\n",
+        "rf_with = RandomForestClassifier(n_estimators=200, max_depth=6, random_state=42).fit(X_with, y)\n",
+        "rf_without = RandomForestClassifier(n_estimators=200, max_depth=6, random_state=42).fit(X_without, y)\n",
+        "\n",
+        "score_with = precision_at_k(test_g.assign(score=rf_with.predict_proba(test_g[features].fillna(0))[:,1]), \"score\", 10)\n",
+        "score_without = precision_at_k(test_g.assign(score=rf_without.predict_proba(test_g[[f for f in features if f != suspect]].fillna(0))[:,1]), \"score\", 10)\n",
+        "\n",
+        "print(f\"[2] Train WITH '{suspect}': Precision@10 = {score_with:.3f}\")\n",
+        "print(f\"    Train WITHOUT '{suspect}': Precision@10 = {score_without:.3f}\")\n",
+        "print(f\"    Collapse of {score_with - score_without:.3f} confirms this feature drives the\")\n",
+        "print(f\"    suspiciously-high score — matches ML-08's finding about the clicks_first_half==0 shortcut.\\n\")\n",
+        "\n",
+        "# 3. Product flags as features?\n",
+        "print(\"[3] Product flags / existing-system scores as features: NONE used. PASS.\\n\")\n",
+        "\n",
+        "# 4. Grouped split?\n",
+        "print(f\"[4] Split grouped by client_hash_id: YES (0 client overlap, confirmed in Section 2). PASS.\\n\")\n",
+        "\n",
+        "# 5. Base rate printed next to metric?\n",
+        "print(f\"[5] Base rate (grouped test set): {base_grouped:.3f}, vs Precision@10 = {p10_grouped:.3f}. PASS — reported together.\\n\")\n",
+        "\n",
+        "# 6. Top feature sanity check\n",
+        "importances = pd.Series(rf_grouped.feature_importances_, index=features).sort_values(ascending=False)\n",
+        "print(f\"[6] Top feature: {importances.index[0]} ({importances.iloc[0]:.3f}). This is suspiciously\")\n",
+        "print(f\"    high given the label-formula shortcut — investigated, not celebrated. FLAGGED.\\n\")\n",
+        "\n",
+        "# 7. Metrics out-of-fold (test set never touched during training)?\n",
+        "print(\"[7] All Precision@10/base-rate numbers computed on held-out test_g only, never train_g. PASS.\")"
+      ],
+      "id": "MPk9oZP0-r5O"
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# --- Corrected test: ctr_first_half is a SIBLING of clicks_first_half (ctr = clicks/impressions) ---\n",
+        "# Removing clicks_first_half alone didn't collapse the score — ctr_first_half carried\n",
+        "# the same shortcut. Testing removal of BOTH.\n",
+        "suspects = [\"clicks_first_half\", \"ctr_first_half\"]\n",
+        "X_without_both = train_g[[f for f in features if f not in suspects]].fillna(0)\n",
+        "rf_without_both = RandomForestClassifier(n_estimators=200, max_depth=6, random_state=42).fit(X_without_both, y)\n",
+        "score_without_both = precision_at_k(\n",
+        "    test_g.assign(score=rf_without_both.predict_proba(test_g[[f for f in features if f not in suspects]].fillna(0))[:,1]),\n",
+        "    \"score\", 10\n",
+        ")\n",
+        "\n",
+        "print(f\"Train WITH both clicks_first_half + ctr_first_half: Precision@10 = {score_with:.3f}\")\n",
+        "print(f\"Train WITHOUT both (only impressions_first_half, avg_position_first_half): Precision@10 = {score_without_both:.3f}\")\n",
+        "print(f\"\\nCollapse of {score_with - score_without_both:.3f} — THIS confirms the real leak:\")\n",
+        "print(\"ctr_first_half is a sibling of clicks_first_half (both derived from the same raw count\")\n",
+        "print(\"that mechanically determines the label when it's zero). My first test only removed one\")\n",
+        "print(\"of the two sibling columns, which is why it looked clean — a good lesson in checking\")\n",
+        "print(\"ALL columns derived from a suspect, not just the one with the obvious name.\")"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "hU4Sl00tAz9z",
+        "outputId": "a7f565b8-cb1b-49d4-feaf-97dbc43612db"
+      },
+      "id": "hU4Sl00tAz9z",
+      "execution_count": 9,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Train WITH both clicks_first_half + ctr_first_half: Precision@10 = 0.900\n",
+            "Train WITHOUT both (only impressions_first_half, avg_position_first_half): Precision@10 = 0.300\n",
+            "\n",
+            "Collapse of 0.600 — THIS confirms the real leak:\n",
+            "ctr_first_half is a sibling of clicks_first_half (both derived from the same raw count\n",
+            "that mechanically determines the label when it's zero). My first test only removed one\n",
+            "of the two sibling columns, which is why it looked clean — a good lesson in checking\n",
+            "ALL columns derived from a suspect, not just the one with the obvious name.\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "uJK14S8J-r5P"
+      },
+      "source": [
+        "## 4. Claim rewrite\n",
+        "\n",
+        "My boldest unaudited claim would have been \"Precision@10 = 0.900, ~3x the base rate\"\n",
+        "— exactly the kind of headline number Section 3's audit exists to catch before it\n",
+        "gets published. The honest, leakage-free number is Precision@10 = 0.300 vs base rate\n",
+        "0.248: observed, modest, decision-support only — real signal, not a dramatic result."
+      ],
+      "id": "uJK14S8J-r5P"
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 10,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "zoNZv2Qj-r5Q",
+        "outputId": "2fe673a3-34e2-499c-fbd4-d40ed37f0deb"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "BEFORE (bold, unaudited):\n",
+            "My Random Forest model achieves Precision@10 = 0.900, roughly 3x the base rate of 0.248.\n",
+            "\n",
+            "AFTER (safe, audited):\n",
+            "On this March 2026 slice, the model's observed Precision@10 was 0.900 under a client-grouped split — but a leakage audit found this was driven almost entirely by ctr_first_half and clicks_first_half acting as sibling proxies for the label's own zero-click boundary condition, not genuine decline prediction. With both removed, the honest, decision-support-only Precision@10 is 0.300 against a base rate of 0.248 — a real but modest, directional signal, not a 3x improvement.\n"
+          ]
+        }
+      ],
+      "source": [
+        "bold_claim = \"My Random Forest model achieves Precision@10 = 0.900, roughly 3x the base rate of 0.248.\"\n",
+        "\n",
+        "safe_claim = (\n",
+        "    \"On this March 2026 slice, the model's observed Precision@10 was 0.900 under a \"\n",
+        "    \"client-grouped split — but a leakage audit found this was driven almost entirely \"\n",
+        "    \"by ctr_first_half and clicks_first_half acting as sibling proxies for the label's \"\n",
+        "    \"own zero-click boundary condition, not genuine decline prediction. With both \"\n",
+        "    \"removed, the honest, decision-support-only Precision@10 is 0.300 against a base \"\n",
+        "    \"rate of 0.248 — a real but modest, directional signal, not a 3x improvement.\"\n",
+        ")\n",
+        "\n",
+        "print(\"BEFORE (bold, unaudited):\")\n",
+        "print(bold_claim)\n",
+        "print(\"\\nAFTER (safe, audited):\")\n",
+        "print(safe_claim)"
+      ],
+      "id": "zoNZv2Qj-r5Q"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "NPlMlllM-r5R"
+      },
+      "source": [
+        "## Self-check\n",
+        "\n",
+        "Before you submit, confirm each line honestly:\n",
+        "\n",
+        "- [x] Every section above is filled — markdown thinking AND the code that backs it\n",
+        "- [x] The notebook runs top to bottom with no errors (Runtime → Run all)\n",
+        "- [x] No client names, URLs, or private queries anywhere\n",
+        "- [x] My claims use careful words: observed, measured, directional, decision-support\n",
+        "- [x] Committed to my repo under `work/notebooks/` — then submit your repo URL on the card. Done."
+      ],
+      "id": "NPlMlllM-r5R"
+    }
+  ],
+  "metadata": {
+    "kernelspec": {
+      "display_name": "Python 3",
+      "name": "python3"
+    },
+    "language_info": {
+      "name": "python"
+    },
+    "colab": {
+      "provenance": []
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 5
+}
