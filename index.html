@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Which Pages Should a Reviewer Check First? — Refresh Opportunity Scoring | FlyRank ML Internship Capstone</title>
+<meta name="description" content="A research paper on content refresh opportunity scoring: baseline vs. model, a real leakage catch, and an honest ranked action playbook.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#12192B;
+    --ink-2:#1B2440;
+    --paper:#F7F5EF;
+    --paper-2:#EFEBE0;
+    --text-light:#E7E9EE;
+    --text-light-dim:#AEB4C4;
+    --text-dark:#1B2333;
+    --text-dark-dim:#5B6274;
+    --amber:#E8A23D;
+    --sage:#6E9080;
+    --coral:#D9694F;
+    --line-dark:rgba(231,233,238,0.14);
+    --line-light:rgba(27,35,51,0.12);
+    --mono:'IBM Plex Mono', ui-monospace, monospace;
+    --sans:'IBM Plex Sans', -apple-system, sans-serif;
+    --display:'Fraunces', Georgia, serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{scroll-behavior:smooth;}
+  body{
+    font-family:var(--sans);
+    background:var(--ink);
+    color:var(--text-light);
+    line-height:1.6;
+    font-size:17px;
+  }
+  a{color:inherit;}
+  .wrap{max-width:920px; margin:0 auto; padding:0 28px;}
+  section{padding:96px 0;}
+  @media (max-width:640px){ section{padding:64px 0;} }
+
+  /* ---------- NAV ---------- */
+  nav{
+    position:sticky; top:0; z-index:50;
+    background:rgba(18,25,43,0.88);
+    backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line-dark);
+  }
+  nav .wrap{display:flex; align-items:center; justify-content:space-between; padding-top:14px; padding-bottom:14px;}
+  .brand{font-family:var(--mono); font-size:13px; letter-spacing:0.06em; color:var(--text-light-dim); text-decoration:none;}
+  .navlinks{display:flex; gap:22px; font-family:var(--mono); font-size:12.5px; letter-spacing:0.03em;}
+  .navlinks a{text-decoration:none; color:var(--text-light-dim); transition:color .15s;}
+  .navlinks a:hover{color:var(--amber);}
+  @media (max-width:720px){ .navlinks{display:none;} }
+
+  /* ---------- HERO ---------- */
+  .hero{padding:88px 0 72px;}
+  .eyebrow{
+    font-family:var(--mono); font-size:12.5px; letter-spacing:0.12em; text-transform:uppercase;
+    color:var(--amber); margin-bottom:22px; display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow::before{content:''; width:22px; height:1px; background:var(--amber); display:inline-block;}
+  h1{
+    font-family:var(--display); font-weight:600; font-size:clamp(34px,5.2vw,54px);
+    line-height:1.08; letter-spacing:-0.01em; color:#fff; max-width:15ch; margin-bottom:22px;
+  }
+  .hero-sub{font-size:18px; color:var(--text-light-dim); max-width:56ch; margin-bottom:44px;}
+  .hero-sub b{color:var(--text-light); font-weight:600;}
+
+  /* signature: SERP-style before/after comparison card */
+  .serp-compare{
+    border:1px solid var(--line-dark); border-radius:10px; overflow:hidden;
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+  }
+  .serp-row{
+    display:grid; grid-template-columns:28px 1fr auto; gap:16px; align-items:center;
+    padding:18px 22px; border-bottom:1px solid var(--line-dark);
+  }
+  .serp-row:last-child{border-bottom:none;}
+  .serp-pos{font-family:var(--mono); font-size:13px; color:var(--text-light-dim);}
+  .serp-label{font-size:15px;}
+  .serp-label .tag{
+    display:inline-block; font-family:var(--mono); font-size:11px; letter-spacing:0.04em;
+    padding:2px 8px; border-radius:20px; margin-right:10px; text-transform:uppercase;
+  }
+  .tag-old{background:rgba(217,105,79,0.16); color:#f0a58f; border:1px solid rgba(217,105,79,0.35);}
+  .tag-new{background:rgba(110,144,128,0.18); color:#a9c9ba; border:1px solid rgba(110,144,128,0.4);}
+  .serp-metric{font-family:var(--mono); font-size:22px; font-weight:600; color:#fff; white-space:nowrap;}
+  .serp-metric small{display:block; font-size:11px; font-weight:400; color:var(--text-light-dim); text-align:right; margin-top:2px;}
+
+  .scroll-cue{margin-top:40px; font-family:var(--mono); font-size:12px; color:var(--text-light-dim); letter-spacing:0.05em;}
+
+  /* ---------- ABSTRACT (paper strip) ---------- */
+  .abstract-strip{background:var(--paper); color:var(--text-dark);}
+  .abstract-strip .label{font-family:var(--mono); font-size:12px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-dark-dim); margin-bottom:18px;}
+  .abstract-strip p{font-family:var(--display); font-size:clamp(19px,2.4vw,24px); font-weight:400; line-height:1.5; max-width:38ch;}
+  .abstract-strip .meta{margin-top:36px; display:flex; gap:36px; flex-wrap:wrap; font-family:var(--mono); font-size:13px; color:var(--text-dark-dim);}
+  .abstract-strip .meta div span{display:block; color:var(--text-dark); font-size:15px; font-weight:600; margin-top:4px;}
+
+  /* ---------- SECTION HEADERS (position-badge numbering) ---------- */
+  .sec-head{display:flex; align-items:baseline; gap:16px; margin-bottom:44px;}
+  .pos-badge{
+    font-family:var(--mono); font-size:13px; font-weight:600;
+    border:1px solid currentColor; border-radius:4px; padding:3px 9px; color:var(--amber); flex-shrink:0;
+  }
+  .light .pos-badge{color:var(--coral);}
+  h2{font-family:var(--display); font-weight:600; font-size:clamp(24px,3.4vw,32px); letter-spacing:-0.01em;}
+  .light h2{color:var(--text-dark);}
+  .dark-sec h2{color:#fff;}
+  .sec-sub{color:var(--text-light-dim); max-width:62ch; margin-bottom:8px;}
+  .light .sec-sub{color:var(--text-dark-dim);}
+
+  .dark-sec{background:var(--ink);}
+  .light{background:var(--paper); color:var(--text-dark);}
+  .light .sec-sub, .light p{color:var(--text-dark-dim);}
+  .light strong{color:var(--text-dark);}
+
+  p{margin-bottom:16px; color:var(--text-light-dim);}
+  strong{color:var(--text-light); font-weight:600;}
+
+  /* ---------- DATA TABLE ---------- */
+  table{width:100%; border-collapse:collapse; font-family:var(--mono); font-size:13.5px; margin:28px 0;}
+  th{text-align:left; padding:10px 14px; font-weight:600; letter-spacing:0.02em; text-transform:uppercase; font-size:11.5px; border-bottom:1px solid var(--line-light);}
+  td{padding:12px 14px; border-bottom:1px solid var(--line-light);}
+  .dark-sec table th, .dark-sec table td{border-bottom:1px solid var(--line-dark);}
+  .light table th{color:var(--text-dark-dim);}
+  .num{text-align:right;}
+
+  /* ---------- LEAK COLLAPSE VISUAL ---------- */
+  .leak-viz{display:flex; align-items:flex-end; gap:32px; margin:36px 0 12px; height:180px;}
+  .bar-col{flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;}
+  .bar{width:64%; border-radius:6px 6px 0 0; position:relative; transition:height .3s;}
+  .bar-label{font-family:var(--mono); font-size:12px; color:var(--text-light-dim); margin-top:10px; text-align:center;}
+  .bar-value{font-family:var(--mono); font-size:20px; font-weight:600; color:#fff; margin-bottom:8px;}
+  .bar-leak{background:linear-gradient(180deg, #E8A23D, #D9694F);}
+  .bar-honest{background:linear-gradient(180deg, #8CB3A3, #6E9080);}
+  .bar-base{background:rgba(231,233,238,0.18);}
+
+  /* ---------- LIMITATION CALLOUTS ---------- */
+  .callout{
+    border-left:3px solid var(--coral); background:rgba(217,105,79,0.07);
+    padding:16px 22px; border-radius:0 8px 8px 0; margin-bottom:16px;
+  }
+  .callout b{color:#f0a58f; display:block; font-size:13px; font-family:var(--mono); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:6px;}
+  .callout p{margin:0; color:var(--text-light-dim); font-size:15px;}
+
+  /* ---------- RANKED QUEUE (signature, recommendations) ---------- */
+  .queue{border:1px solid var(--line-light); border-radius:10px; overflow:hidden; margin:32px 0;}
+  .queue-row{
+    display:grid; grid-template-columns:32px 1fr auto; gap:14px; align-items:center;
+    padding:16px 20px; border-bottom:1px solid var(--line-light); background:#fff;
+  }
+  .queue-row:last-child{border-bottom:none;}
+  .queue-row:nth-child(even){background:var(--paper-2);}
+  .qpos{font-family:var(--mono); font-size:13px; color:var(--text-dark-dim);}
+  .qid{font-family:var(--mono); font-size:13px; color:var(--text-dark-dim);}
+  .qcount{font-family:var(--mono); font-size:13px; color:var(--text-dark-dim); text-align:right;}
+  .pill{
+    display:inline-block; font-family:var(--mono); font-size:11px; letter-spacing:0.02em;
+    padding:4px 11px; border-radius:20px; font-weight:600; margin-right:10px;
+  }
+  .pill-review{background:rgba(232,162,61,0.16); color:#946018; border:1px solid rgba(232,162,61,0.5);}
+  .pill-refresh{background:rgba(217,105,79,0.14); color:#a34124; border:1px solid rgba(217,105,79,0.45);}
+  .pill-monitor{background:rgba(110,144,128,0.14); color:#3f5b4d; border:1px solid rgba(110,144,128,0.45);}
+
+  /* ---------- NO-GO LIST ---------- */
+  .nogo{list-style:none; margin:24px 0;}
+  .nogo li{padding:10px 0 10px 28px; position:relative; color:var(--text-dark-dim); font-size:15px; border-bottom:1px dashed var(--line-light);}
+  .nogo li:last-child{border-bottom:none;}
+  .nogo li::before{content:'✕'; position:absolute; left:0; color:var(--coral); font-weight:700;}
+
+  /* ---------- FILE TREE / REPRO ---------- */
+  .filetree{
+    font-family:var(--mono); font-size:13.5px; background:var(--ink-2); border:1px solid var(--line-dark);
+    border-radius:10px; padding:24px 26px; color:var(--text-light-dim); line-height:1.9; overflow-x:auto;
+    white-space:pre;
+  }
+  .filetree .dim{color:#6b7284;}
+  .filetree .hi{color:var(--amber);}
+
+  .btnrow{display:flex; gap:14px; margin-top:28px; flex-wrap:wrap;}
+  .btn{
+    font-family:var(--mono); font-size:13px; padding:11px 20px; border-radius:6px; text-decoration:none;
+    border:1px solid var(--line-dark); color:var(--text-light); transition:all .15s;
+  }
+  .btn:hover{border-color:var(--amber); color:var(--amber);}
+
+  /* ---------- FOOTER ---------- */
+  footer{background:var(--paper-2); color:var(--text-dark-dim); padding:56px 0 40px;}
+  footer .wrap{display:flex; justify-content:space-between; flex-wrap:wrap; gap:24px; align-items:flex-end;}
+  footer .credit{font-size:14px; max-width:44ch;}
+  footer .credit a{color:var(--text-dark); font-weight:600; text-decoration:underline; text-decoration-color:var(--amber); text-underline-offset:3px;}
+  footer .fine{font-family:var(--mono); font-size:12px; color:#9098a8; margin-top:14px;}
+
+  ::selection{background:var(--amber); color:#12192B;}
+  :focus-visible{outline:2px solid var(--amber); outline-offset:2px;}
+  @media (prefers-reduced-motion:reduce){ html{scroll-behavior:auto;} }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top">REFRESH-OPPORTUNITY-SCORING · CAPSTONE</a>
+    <div class="navlinks">
+      <a href="#data">Data</a>
+      <a href="#method">Method</a>
+      <a href="#results">Results</a>
+      <a href="#limits">Limits</a>
+      <a href="#recs">Recommendations</a>
+      <a href="#repro">Reproducibility</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <div class="eyebrow">FlyRank ML Internship · Capstone Research Paper</div>
+    <h1>Which pages should a reviewer check first?</h1>
+    <p class="hero-sub">
+      A hand-written rule gets it right about as often as flipping a coin weighted by
+      how common the pattern already is. A validated signal, audited for the leak that
+      almost made it look perfect, does modestly better — and says so honestly.
+      <b>Lane: Refresh / Content Opportunity Scoring.</b>
+    </p>
+
+    <div class="serp-compare">
+      <div class="serp-row">
+        <div class="serp-pos">01</div>
+        <div class="serp-label"><span class="tag tag-old">Hand-written rule</span>Weak-CTR-for-position, high-volume flag</div>
+        <div class="serp-metric">0.203<small>Precision@10 ≈ base rate</small></div>
+      </div>
+      <div class="serp-row">
+        <div class="serp-pos">02</div>
+        <div class="serp-label"><span class="tag tag-new">Validated signal</span>Leakage audited, honest features only</div>
+        <div class="serp-metric">0.300<small>vs. base rate 0.248</small></div>
+      </div>
+    </div>
+    <div class="scroll-cue">↓ five sections, one honest number at the end of each</div>
+  </div>
+</header>
+
+<section class="abstract-strip">
+  <div class="wrap">
+    <div class="label">Abstract</div>
+    <p>
+      This paper asks which content pages a reviewer should check first when review time
+      is limited. We build a transparent baseline rule from two confirmed signals (CTR
+      falls sharply with search position; decline rate rises with impression volume),
+      train Logistic Regression and Random Forest models on the same client-holdout
+      split, and catch a real feature-label leak before trusting the result. The honest,
+      leakage-free signal reaches Precision@10 = 0.300 against a base rate of 0.248 —
+      real but modest — and is turned into a three-archetype action playbook with
+      explicit no-go rules for what should never be automated.
+    </p>
+    <div class="meta">
+      <div>Lane<span>Refresh / Content Opportunity Scoring</span></div>
+      <div>Data window<span>March 2026 (mid-panel)</span></div>
+      <div>Unit of analysis<span>(client, content) pair</span></div>
+      <div>Split<span>Grouped by client</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="dark-sec" id="intro">
+  <div class="wrap">
+    <div class="sec-head"><span class="pos-badge">01</span><h2>Introduction</h2></div>
+    <p>
+      A content team with limited review time cannot check every page every month.
+      This paper supports one decision: <strong>given a fixed review budget, which
+      pages should be opened first?</strong> The unit of analysis is one (client,
+      content) pair, aggregated over a calendar month. The output is a ranked queue;
+      the action a human takes is opening the top rows and deciding whether to refresh,
+      rewrite, or leave a page alone. The cost of a wrong call is real but asymmetric:
+      a false flag wastes a reviewer's morning, a missed decline keeps losing a
+      high-traffic page's visibility unnoticed.
+    </p>
+    <p>
+      Thousands of pages and one reviewer's time make some form of ranking unavoidable.
+      The real question this paper tests is whether a learned ranking earns its place
+      over a simple, fully transparent rule — and whether that improvement survives
+      honest scrutiny once it's found.
+    </p>
+  </div>
+</section>
+
+<section class="light" id="data">
+  <div class="wrap">
+    <div class="sec-head"><span class="pos-badge">02</span><h2>Data</h2></div>
+    <p class="sec-sub">Public release, one mid-panel month, deliberately excluded columns named.</p>
+    <table>
+      <tr><th>Field</th><th>Value</th></tr>
+      <tr><td>Release</td><td>FlyRank internship data warehouse (Hugging Face, gated public release)</td></tr>
+      <tr><td>Table</td><td>fact_content_daily_performance</td></tr>
+      <tr><td>Window</td><td>March 2026 — a mid-panel month, not the sealed final month</td></tr>
+      <tr><td>Raw rows in window</td><td class="num">9,841,378</td></tr>
+      <tr><td>After availability filter (gsc_data_available = true)</td><td class="num">3,611,061 (36.7%)</td></tr>
+      <tr><td>Aggregated (client, content) pairs</td><td class="num">141,467</td></tr>
+      <tr><td>Deliberately excluded</td><td>fact_content_query_90d (its 90-day window overlaps the label window)</td></tr>
+    </table>
+    <p>
+      Only pseudonymous <code>client_hash_id</code> / <code>content_hash_id</code> values
+      are used, and only for grouping — never as model features. No client names,
+      domains, or raw queries appear anywhere in this analysis.
+    </p>
+  </div>
+</section>
+
+<section class="dark-sec" id="method">
+  <div class="wrap">
+    <div class="sec-head"><span class="pos-badge">03</span><h2>Methodology</h2></div>
+    <p class="sec-sub">Label, features, baseline, split design, and the leak we caught before trusting the number.</p>
+
+    <p><strong>Label (proxy):</strong> a page is flagged <code>is_declining_proxy = 1</code>
+    when its clicks in the second half of March are lower than in the first half — an
+    observed within-month comparison, not a causal claim.</p>
+
+    <p><strong>Baseline:</strong> a transparent rule flags pages in the top quartile of
+    first-half impressions whose CTR sits below the median for their position tier.
+    Two signals behind it were confirmed first: CTR falls from 75.0% (position 1–3) to
+    18.7% (position 21+); decline rate rises from 3.1% to 43.5% across impression
+    quartiles.</p>
+
+    <p><strong>Split:</strong> grouped by client (client-holdout) — no client's content
+    appears in both train and test, so the model can't learn client-level quirks and
+    get an unfair advantage on "unseen" rows from a client it already saw.</p>
+
+    <p><strong>The leak we caught:</strong> Logistic Regression and Random Forest both
+    scored suspiciously high (LR: 1.000 Precision@10). Removing the obviously-named
+    suspect feature alone changed nothing — the real cause was a <em>sibling</em>
+    feature (CTR is computed from clicks), both mechanically tied to the label's own
+    zero-click boundary.</p>
+
+    <div class="leak-viz">
+      <div class="bar-col">
+        <div class="bar-value">0.203</div>
+        <div class="bar bar-base" style="height:34%"></div>
+        <div class="bar-label">Base rate<br>(random)</div>
+      </div>
+      <div class="bar-col">
+        <div class="bar-value">0.900</div>
+        <div class="bar bar-leak" style="height:100%"></div>
+        <div class="bar-label">With leaking<br>sibling features</div>
+      </div>
+      <div class="bar-col">
+        <div class="bar-value">0.300</div>
+        <div class="bar bar-honest" style="height:52%"></div>
+        <div class="bar-label">Honest model<br>(leak removed)</div>
+      </div>
+    </div>
+    <p style="font-size:13px; color:var(--text-light-dim);">Precision@10, client-holdout test split. Full attack-checklist audit in the repo's <code>w06_validation_audit.ipynb</code>.</p>
+  </div>
+</section>
+
+<section class="light" id="results">
+  <div class="wrap">
+    <div class="sec-head"><span class="pos-badge">04</span><h2>Results, vs. baseline</h2></div>
+    <p class="sec-sub">Same split, same metric, all three compared honestly.</p>
+    <table>
+      <tr><th>Method</th><th class="num">Precision@10</th><th class="num">Precision@20</th><th class="num">Base rate</th></tr>
+      <tr><td>Base rate (random)</td><td class="num">0.248</td><td class="num">0.248</td><td class="num">—</td></tr>
+      <tr><td>Baseline rule</td><td class="num">0.300</td><td class="num">0.300</td><td class="num">0.203</td></tr>
+      <tr><td>Random Forest — before leak fix</td><td class="num">0.900</td><td class="num">0.950</td><td class="num">0.248</td></tr>
+      <tr><td><strong>Random Forest — honest, leak removed</strong></td><td class="num"><strong>0.300</strong></td><td class="num">—</td><td class="num">0.248</td></tr>
+    </table>
+    <p>
+      The honest model does not beat the baseline rule on this slice — both land at
+      Precision@10 = 0.300. The value of the modeling work here was not a lift over
+      the baseline; it was <strong>catching a leak that would have shipped a false 3x
+      improvement</strong> had the first, incomplete leak test been trusted.
+    </p>
+    <p>
+      Errors cluster in one honest, explainable way: pages with genuinely low but
+      <em>stable</em> click-through rates for their query type get flagged as
+      "underperforming" when nothing has actually changed — the model has no way to
+      distinguish "always been this way" from "newly declining" using only the signals
+      available in this window.
+    </p>
+  </div>
+</section>
+
+<section class="dark-sec" id="limits">
+  <div class="wrap">
+    <div class="sec-head"><span class="pos-badge">05</span><h2>Limitations &amp; honest framing</h2></div>
+    <div class="callout">
+      <b>Proxy label</b>
+      <p>is_declining_proxy is an observed within-month click comparison, not a validated causal outcome. A flagged page may have an ordinary explanation (seasonality, a single spike day) this analysis cannot see.</p>
+    </div>
+    <div class="callout">
+      <b>Partial coverage</b>
+      <p>Only pages with gsc_data_available = true are visible to this analysis — about 36.7% of the raw window. Pages without active tracking are invisible to the queue, not necessarily low-priority.</p>
+    </div>
+    <div class="callout">
+      <b>One month, one lane</b>
+      <p>Built and validated on March 2026 only. Not yet re-tested on a second month or a different client mix.</p>
+    </div>
+    <div class="callout">
+      <b>Modest, not dramatic</b>
+      <p>Precision@10 = 0.300 against a base rate of 0.248 is a real, directional, decision-support signal — not a strong discriminator, and not a claim about how any search engine's ranking algorithm works.</p>
+    </div>
+  </div>
+</section>
+
+<section class="light" id="recs">
+  <div class="wrap">
+    <div class="sec-head"><span class="pos-badge">06</span><h2>Ranked recommendations</h2></div>
+    <p class="sec-sub">Three archetypes, mapped to one action each, ranked by impressions within archetype.</p>
+
+    <div class="queue">
+      <div class="queue-row">
+        <div class="qpos">01</div>
+        <div><span class="pill pill-review">review_ctr</span>Visible, underperforming — good position, weak CTR for its tier</div>
+        <div class="qcount">7,357 pages</div>
+      </div>
+      <div class="queue-row">
+        <div class="qpos">02</div>
+        <div><span class="pill pill-refresh">refresh_content</span>Losing ground — high impressions, clicks declined within-month</div>
+        <div class="qcount">24,224 pages</div>
+      </div>
+      <div class="queue-row">
+        <div class="qpos">03</div>
+        <div><span class="pill pill-monitor">monitor_only</span>Low priority — neither pattern present this cycle</div>
+        <div class="qcount">109,886 pages</div>
+      </div>
+    </div>
+
+    <p><strong>Human review, before acting on any flagged page:</strong> check for a
+    scheduled or recent title/meta test, a known external cause (seasonality, a spike
+    day, a SERP feature change), and the page's actual business value — a
+    high-impression page is not always a high-value one.</p>
+
+    <ul class="nogo">
+      <li>Never auto-publish content or title/meta changes from this score alone</li>
+      <li>Never treat "monitor_only" as permanently irrelevant</li>
+      <li>Never treat "refresh_content" as a signal to unpublish or delete a page</li>
+      <li>Never present Precision@10 = 0.300 to a client as a guarantee</li>
+    </ul>
+
+    <p style="font-size:14px;"><strong>Monitoring:</strong> re-run monthly on a fresh mid-panel month; re-audit if Precision@10 drops toward the base rate, if GSC coverage falls well below ~37%, or if the active client roster shifts significantly.</p>
+  </div>
+</section>
+
+<section class="dark-sec" id="repro">
+  <div class="wrap">
+    <div class="sec-head"><span class="pos-badge">07</span><h2>Reproducibility</h2></div>
+    <p class="sec-sub">Every number above traces back to a notebook in the public repo.</p>
+    <div class="filetree">
+<span class="dim">flyrank-ml-internship/</span>
+└── work/notebooks/
+    ├── w01_research_question.ipynb      <span class="dim">lane choice, initial numbers</span>
+    ├── w02_ml_task_framing.ipynb        <span class="dim">task type, target, metric</span>
+    ├── w03_data_contract.ipynb          <span class="dim">grain, availability, limits</span>
+    ├── w04_baseline_score.ipynb         <span class="dim">signal checks + baseline rule</span>
+    ├── w05_model.ipynb                  <span class="dim">LR / RF vs. baseline</span>
+    ├── w06_validation_audit.ipynb       <span class="hi">the leak catch — start here</span>
+    ├── w07_action_playbook.ipynb        <span class="dim">archetypes + exports</span>
+    └── capstone.ipynb                   <span class="dim">this paper, end to end</span>
+    </div>
+    <div class="btnrow">
+      <a class="btn" href="https://github.com/jamal-ai-dev/flyrank-ml-internship" target="_blank" rel="noopener">→ Full repository</a>
+      <a class="btn" href="https://github.com/jamal-ai-dev/flyrank-ml-internship/blob/main/work/notebooks/w06_validation_audit.ipynb" target="_blank" rel="noopener">→ The leakage audit</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="credit">
+      Built on the FlyRank ML Internship dataset —
+      <a href="https://flyrank.ai" target="_blank" rel="noopener">flyrank.ai</a>.
+      <div class="fine">All claims use observed / measured / directional / decision-support language. No client names, domains, or private queries appear anywhere above.</div>
+    </div>
+    <div class="fine">Capstone · Machine Learning Track · Refresh / Content Opportunity Scoring</div>
+  </div>
+</footer>
+
+</body>
+</html>
